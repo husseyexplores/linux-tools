@@ -65,6 +65,9 @@ max_history = 1000
 fractions = false
 # rad, deg or gra (empty = qalculate's own setting)
 angle =
+# relative | hybrid | absolute: how °C/°F mix in sums
+# (relative: (100 °F to °C) + 5 °C = 42.78 °C; plain conversions are the same in all modes)
+temperature = relative
 # give up on a calculation after this many milliseconds
 timeout_ms = 2000
 

@@ -1922,7 +1922,7 @@ int main(int argc, char **argv) {
     build_bindings();
     history = load_history(cfg.max_history);
     setup_x();
-    engine::start(cfg.timeout_ms, cfg.angle, cfg.fractions, cfg.exchange_rates_max_age);
+    engine::start(cfg.timeout_ms, cfg.angle, cfg.fractions, cfg.exchange_rates_max_age, cfg.temperature);
     restore_state();
     if (start_shown) show();
     XFlush(dpy);

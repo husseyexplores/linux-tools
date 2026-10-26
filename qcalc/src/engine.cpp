@@ -22,7 +22,7 @@ int busy_uid = -1;
 uint64_t busy_gen = 0;
 bool calc_ready = false;
 int timeout = 2000;
-std::string angle_cfg;
+std::string angle_cfg, temp_cfg;
 bool fractions = false;
 
 // exchange rates
@@ -188,6 +188,11 @@ void worker() {
     CALCULATOR->loadGlobalDefinitions();
     CALCULATOR->loadLocalDefinitions();
     g_rates_time = (long long)CALCULATOR->getExchangeRatesTime();
+    // "relative" makes mixed °F/°C sums behave like "convert, then add": 100 °F + 5 °C = 42.78 °C.
+    // Plain conversions (20 °C to K) are the same in every mode.
+    CALCULATOR->setTemperatureCalculationMode(temp_cfg == "hybrid"     ? TEMPERATURE_CALCULATION_HYBRID
+                                              : temp_cfg == "absolute" ? TEMPERATURE_CALCULATION_ABSOLUTE
+                                                                       : TEMPERATURE_CALCULATION_RELATIVE);
 
     EvaluationOptions eo = default_user_evaluation_options;
     if (angle_cfg == "rad") eo.parse_options.angle_unit = ANGLE_UNIT_RADIANS;
@@ -255,8 +260,10 @@ void worker() {
 }  // namespace
 
 namespace engine {
-void start(int timeout_ms, const std::string &angle, bool show_fractions, double rates_max_age_days) {
+void start(int timeout_ms, const std::string &angle, bool show_fractions, double rates_max_age_days,
+           const std::string &temperature) {
     timeout = timeout_ms;
+    temp_cfg = temperature;
     max_age_days = rates_max_age_days;
     fractions = show_fractions;
     angle_cfg = angle;

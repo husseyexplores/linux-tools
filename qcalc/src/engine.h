@@ -21,7 +21,8 @@ struct CalcResult {
 enum RatesState { RATES_IDLE, RATES_UPDATING, RATES_FAILED };
 
 namespace engine {
-void start(int timeout_ms, const std::string &angle, bool show_fractions, double rates_max_age_days);
+void start(int timeout_ms, const std::string &angle, bool show_fractions, double rates_max_age_days,
+           const std::string &temperature);
 void submit(int uid, uint64_t gen, const std::string &expr);  // replaces any queued request for uid
 void cancel(int uid);
 int fd();                          // readable when results are waiting

@@ -151,6 +151,7 @@ max_history = 1000
 # Math (need `qcalc quit` to apply)
 fractions = false           # true: show "1/3 ≈ 0.333" style exact fractions too
 angle =                     # rad | deg | gra (empty = qalculate's own setting)
+temperature = relative      # relative | hybrid | absolute: how °C/°F mix in sums (relative: 100 °F + 5 °C = 42.78 °C)
 timeout_ms = 2000           # give up on a calculation after this long
 
 # Exchange rates (applies on reload)

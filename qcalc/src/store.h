@@ -16,6 +16,7 @@ struct Config {
     int timeout_ms = 2000;           // per calculation
     bool fractions = false;          // also show exact fractions, e.g. "1/3 ≈ 0.333"
     double exchange_rates_max_age = 1; // days; refresh rates in the background when older (0 = only manually)
+    std::string temperature = "relative"; // relative | hybrid | absolute: how °C/°F behave in sums
     std::string angle = "";          // "", "rad", "deg", "gra" ("" = qalculate's own setting)
     // Layout, in px at 96 dpi (scaled with Xft.dpi)
     double radius = 6;               // input box corner radius

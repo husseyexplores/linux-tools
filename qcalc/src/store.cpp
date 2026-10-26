@@ -111,6 +111,7 @@ Config load_config() {
         else if (k == "max_history") c.max_history = std::max(0, atoi(v.c_str()));
         else if (k == "timeout_ms") c.timeout_ms = std::max(50, atoi(v.c_str()));
         else if (k == "angle") c.angle = v;
+        else if (k == "temperature") c.temperature = v;
         else if (k == "fractions") c.fractions = parse_bool(v);
         else if (k == "color_bg") parse_color(v, c.bg);
         else if (k == "color_field") parse_color(v, c.field);
