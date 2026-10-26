@@ -23,6 +23,7 @@ uint64_t busy_gen = 0;
 bool calc_ready = false;
 int timeout = 2000;
 std::string angle_cfg, temp_cfg;
+bool local_currency = false;
 bool fractions = false;
 
 // exchange rates
@@ -124,6 +125,25 @@ std::string hoist_conversions(const std::string &expr) {
     return s;
 }
 
+// "x := (1 usd to jpy)": qalculate stores the value before the conversion (1 USD), so "x * 10" shows
+// dollars. After qalculate has made the assignment (with its own rules for shadowing built-in names),
+// replace the stored value with the converted one.
+void store_converted_assignment(const std::string &expr, const EvaluationOptions &eo) {
+    size_t asg = expr.find(":=");
+    if (asg == std::string::npos) return;
+    std::string name = expr.substr(0, asg), rhs = hoist_conversions(expr.substr(asg + 2));
+    size_t a = name.find_first_not_of(' '), b = name.find_last_not_of(' '), len;
+    if (a == std::string::npos) return;
+    name = name.substr(a, b - a + 1);
+    if (find_top_to(rhs, 0, rhs.size(), &len) == std::string::npos) return;  // no conversion: nothing to fix
+    Variable *v = CALCULATOR->getActiveVariable(name);
+    if (!v || !v->isLocal() || !v->isKnown()) return;
+    MathStructure m;
+    if (CALCULATOR->calculate(&m, CALCULATOR->unlocalizeExpression(rhs, eo.parse_options), timeout, eo))
+        ((KnownVariable *)v)->set(m);
+    CALCULATOR->clearMessages();
+}
+
 void post_event(int kind) {  // mtx held
     CalcResult ev{};
     ev.uid = kind;
@@ -195,6 +215,7 @@ void worker() {
                                                                        : TEMPERATURE_CALCULATION_RELATIVE);
 
     EvaluationOptions eo = default_user_evaluation_options;
+    eo.local_currency_conversion = local_currency;
     if (angle_cfg == "rad") eo.parse_options.angle_unit = ANGLE_UNIT_RADIANS;
     else if (angle_cfg == "deg") eo.parse_options.angle_unit = ANGLE_UNIT_DEGREES;
     else if (angle_cfg == "gra") eo.parse_options.angle_unit = ANGLE_UNIT_GRADIANS;
@@ -242,6 +263,7 @@ void worker() {
         for (CalculatorMessage *m = CALCULATOR->message(); m; m = CALCULATOR->nextMessage())
             if (m->type() == MESSAGE_ERROR) err = true;
         if (CALCULATOR->aborted()) err = true;
+        if (!err) store_converted_assignment(expr, eo);
 
         bool cur = CALCULATOR->exchangeRatesUsed() != 0;
         CalcResult res{uid, gen, r, copy_text(r), approx, err || r.empty(), cur};
@@ -261,8 +283,9 @@ void worker() {
 
 namespace engine {
 void start(int timeout_ms, const std::string &angle, bool show_fractions, double rates_max_age_days,
-           const std::string &temperature) {
+           const std::string &temperature, bool local_currency_conversion) {
     timeout = timeout_ms;
+    local_currency = local_currency_conversion;
     temp_cfg = temperature;
     max_age_days = rates_max_age_days;
     fractions = show_fractions;

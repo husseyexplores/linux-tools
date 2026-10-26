@@ -157,6 +157,7 @@ timeout_ms = 2000           # give up on a calculation after this long
 
 # Exchange rates (applies on reload)
 exchange_rates_max_age = 1  # days; refresh in the background when older (0 = only manually)
+local_currency = false      # true: show every currency result in your locale's currency (needs `qcalc quit`)
 ```
 
 ### Shortcuts
@@ -193,6 +194,8 @@ Press **Ctrl+Shift+R** in qcalc, or run `qcalc reload`. That covers everything e
 qcalc uses qalculate's rate cache in `~/.local/share/qalculate/`, which it shares with `qalc` and qalculate-gtk. It works stale-while-revalidate:
 - Results always come from the cache straight away. Nothing waits on the network, and opening the window never touches it.
 - When a calculation actually uses a currency and the cache is older than `exchange_rates_max_age` days, qcalc downloads all rates on a background thread. Then it reloads them and recalculates the currency rows, so results update by themselves a moment later. If the download fails (offline, for example), it keeps the old rates and tries again at most every 15 minutes.
+- Results stay in the currency you typed (`100 jpy * 3` = ¥300). Mixed currencies like `100 usd + 50 eur` come out in euros, the rates' base currency, unless you add `to usd`. Set `local_currency = true` to always see your locale's currency instead, which was qalculate's default behavior.
+- An assignment with a conversion stores the converted value: after `x := (1 usd to jpy)`, `x * 10` is ¥1568.
 - You can force an update with **Update exchange rates** in the right-click menu, or with `qcalc update-rates`.
 - While a visible result uses a currency, a small line under the boxes shows the cache age, e.g. `Rates cached on 2026-10-26 00:21 (3h 12m ago)`. During a download it reads `Updating exchange rates…`, and after a failed one it adds `· update failed`.
 

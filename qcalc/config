@@ -75,6 +75,9 @@ timeout_ms = 2000
 # days; when a calculation uses a currency and the cached rates are older,
 # fetch new ones in the background (0 = only via the menu / `qcalc update-rates`)
 exchange_rates_max_age = 1
+# true: show every currency result in your locale's currency (e.g. 100 jpy -> $0.64)
+# false: keep the currency you typed (100 jpy * 3 -> ¥300). Needs `qcalc quit`.
+local_currency = false
 
 # ---- Shortcuts
 # Comma-separated combos. Modifiers: ctrl, shift, alt, super.
