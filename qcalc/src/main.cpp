@@ -1483,7 +1483,9 @@ static void on_key(XKeyEvent &ev) {
 
     unsigned mods = ev.state & MOD_MASK;
     KeySym nk = norm_keysym(ks);
-    KeySym base = norm_keysym(XLookupKeysym(&ev, 0));  // unshifted key: "ctrl+shift+0" arrives as ')'
+    // Unshifted key, so "ctrl+shift+0" matches although it arrives as ')'. Only with Shift held, and
+    // never for the keypad: there the unshifted symbol is the NumLock-off one (KP_8 -> Up).
+    KeySym base = (mods & ShiftMask) && !IsKeypadKey(ks) ? norm_keysym(XLookupKeysym(&ev, 0)) : nk;
     for (auto &b : bindings)
         if (b.ks == base && b.mods == mods && base != nk) {
             run_action(b.action, r);
