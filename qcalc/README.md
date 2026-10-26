@@ -94,6 +94,7 @@ KDE: System Settings > Shortcuts > Add New > Command. GNOME: Settings > Keyboard
 | Ctrl+Shift+R | reload the config |
 | Ctrl+Shift+0, small ◎ left of the × | center the window again |
 | Mouse | click to place the cursor, drag to select, double-click selects a word, triple-click selects all, middle-click pastes |
+| Mouse on a result | drag to select part of it, double-click selects a word, triple-click the whole value (without `=`/`≈`); Ctrl+C copies it, middle-click pastes it elsewhere |
 | Drag the background or the top-right tab | move the window anywhere |
 | Right-click the background | menu: Close, Center, Reload config, Update exchange rates, Clear history, Quit qcalc (Up/Down + Enter work too, Esc closes it) |
 

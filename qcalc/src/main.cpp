@@ -380,6 +380,50 @@ static size_t index_at(Row &r, size_t i, double x) {
     return p;
 }
 
+// ---------------------------------------------------------------- result selection (mouse)
+// Offsets are bytes into the displayed result ("≈ €89.34"). The selection drops when that text changes.
+static int rsel_uid = -1;
+static size_t rsel_a = 0, rsel_b = 0;
+static std::string rsel_text;
+static bool rsel_dragging = false;
+
+static int rsel_uid_ref() { return rsel_uid; }
+
+static void rsel_clear() {
+    if (rsel_uid != -1) need_redraw = true;
+    rsel_uid = -1;
+    rsel_dragging = false;
+}
+
+static bool rsel_active(const Row &r) {
+    return rsel_uid == r.uid && rsel_a != rsel_b && result_display(r) == rsel_text;
+}
+
+static std::string rsel_string() {
+    size_t a = std::min(rsel_a, rsel_b), b = std::max(rsel_a, rsel_b);
+    std::string t = rsel_text.substr(a, b - a), out;
+    for (size_t i = 0; i < t.size(); i++) {  // U+2212 minus -> '-', so it pastes anywhere
+        if (t.compare(i, 3, "\xE2\x88\x92") == 0) {
+            out += '-';
+            i += 2;
+        } else out += t[i];
+    }
+    return out;
+}
+
+static size_t result_index_at(Row &r, size_t i, double x) {
+    Geo g = geo(i);
+    double rw;
+    layout_row(r, g, &rw);
+    std::string rd = result_display(r);
+    int idx = 0, trailing = 0;
+    pango_layout_xy_to_index(r.rlay, (int)((x - (g.rr - rw)) * PANGO_SCALE), (int)(line_h / 2 * PANGO_SCALE), &idx,
+                             &trailing);
+    size_t p = u8_fix(rd, (size_t)std::max(0, idx));
+    while (trailing-- > 0) p = u8_next(rd, p);
+    return p;
+}
+
 // ---------------------------------------------------------------- engine glue
 
 static Row *row_by_uid(int uid) {
@@ -459,7 +503,11 @@ static void handle_selection_request(XSelectionRequestEvent &e) {
 
 // ---------------------------------------------------------------- editing
 
+static void rsel_clear();
+static int rsel_uid_ref();
+
 static void mark_changed(Row &r, bool keep_hist = false) {
+    if (r.uid == rsel_uid_ref()) rsel_clear();
     r.lay_dirty = true;
     r.gen++;
     if (!keep_hist) r.hist = -1;
@@ -799,6 +847,15 @@ static void redraw() {
 
         // result
         if (rw > 0) {
+            if (rsel_active(r)) {
+                PangoRectangle pa, pb;
+                pango_layout_get_cursor_pos(r.rlay, (int)std::min(rsel_a, rsel_b), &pa, nullptr);
+                pango_layout_get_cursor_pos(r.rlay, (int)std::max(rsel_a, rsel_b), &pb, nullptr);
+                double x0 = g.rr - rw + pa.x / (double)PANGO_SCALE, x1 = g.rr - rw + pb.x / (double)PANGO_SCALE;
+                set_color(cr, cfg.sel, foc && has_focus ? 1 : 0.6);
+                cairo_rectangle(cr, x0, g.ty, x1 - x0, line_h);
+                cairo_fill(cr);
+            }
             bool fl = flash_uid == r.uid && t < flash_until;
             set_color(cr, fl ? cfg.accent : cfg.dim, r.needs_enter ? 0.7 : 1);
             cairo_move_to(cr, g.rr - rw, g.ty);
@@ -993,7 +1050,12 @@ static void hit(int x, int y, int &row, int &zone) {
         if (y < g.y - gap / 2 || y >= g.y + g.h + gap / 2) continue;
         row = (int)i;
         if (x >= g.bx - 2 && x <= g.bx + bsz + 2 && y >= g.by - 2 && y <= g.by + bsz + 2) zone = 2;
-        else if (x >= g.x && x < g.x + g.w && y >= g.y && y < g.y + g.h) zone = 1;
+        else if (x >= g.x && x < g.x + g.w && y >= g.y && y < g.y + g.h) {
+            double rw;
+            Geo g2 = g;
+            layout_row(rows[i], g2, &rw);
+            zone = rw > 0 && x >= g2.rr - rw - 2 && x <= g2.rr + 2 ? 5 : 1;  // 5 = result
+        }
         return;
     }
 }
@@ -1156,7 +1218,8 @@ static void run_action(int a, Row &r) {
     case ACT_HIST_PREV: history_nav(r, -1); break;
     case ACT_HIST_NEXT: history_nav(r, 1); break;
     case ACT_COPY:
-        if (has_sel(r)) own_selection(A_CLIPBOARD, sel_text(r));
+        if (rsel_active(r)) own_selection(A_CLIPBOARD, rsel_string());
+        else if (has_sel(r)) own_selection(A_CLIPBOARD, sel_text(r));
         else copy_result(r);
         break;
     case ACT_CUT:
@@ -1553,7 +1616,43 @@ static void on_button_press(XButtonEvent &e) {
         press_btn = ri;
         return;
     }
+    if (zone == 5 && e.button == 1) {  // select in the result
+        focus = ri;
+        Row &r = rows[ri];
+        r.anchor = r.cur;  // so Ctrl+C copies the result selection
+        std::string rd = result_display(r);
+        size_t idx = result_index_at(r, ri, e.x);
+        double t = now_ms();
+        int key = ri + 100000;  // separate click counting from the input text
+        if (key == last_click_row && t - last_click_t < 400 && std::fabs(e.x - last_click_x) < 5)
+            click_count = click_count % 3 + 1;
+        else click_count = 1;
+        last_click_t = t;
+        last_click_x = e.x;
+        last_click_row = key;
+        rsel_uid = r.uid;
+        rsel_text = rd;
+        if (click_count == 1) {
+            rsel_a = rsel_b = idx;
+            rsel_dragging = true;
+        } else if (click_count == 2 && !rd.empty()) {
+            size_t probe = idx < rd.size() ? idx : u8_prev(rd, idx), a2 = probe, b2 = u8_next(rd, probe);
+            int c = char_class(rd, probe);
+            while (a2 > 0 && char_class(rd, u8_prev(rd, a2)) == c) a2 = u8_prev(rd, a2);
+            while (b2 < rd.size() && char_class(rd, b2) == c) b2 = u8_next(rd, b2);
+            rsel_a = a2;
+            rsel_b = b2;
+        } else {  // the value, without the "= " / "≈ " prefix
+            size_t sp = rd.find(' ');
+            rsel_a = sp == std::string::npos ? 0 : sp + 1;
+            rsel_b = rd.size();
+        }
+        if (click_count > 1 && rsel_active(r)) own_selection(XA_PRIMARY, rsel_string());
+        need_redraw = true;
+        return;
+    }
     if (zone != 1) return;
+    if (e.button == 1) rsel_clear();
     focus = ri;
     Row &r = rows[ri];
     size_t idx = index_at(r, ri, e.x);
@@ -1606,7 +1705,18 @@ static void on_motion(XMotionEvent &e) {
         hover_btn = hb;
         need_redraw = true;
     }
-    set_cursor_shape(zone >= 2 ? cur_hand : zone == 1 ? cur_text : cur_move);
+    set_cursor_shape(zone == 1 || zone == 5 ? cur_text : zone >= 2 ? cur_hand : cur_move);
+    if (rsel_dragging) {
+        for (size_t i = 0; i < rows.size(); i++)
+            if (rows[i].uid == rsel_uid) {
+                size_t idx = result_index_at(rows[i], i, e.x);
+                if (idx != rsel_b) {
+                    rsel_b = idx;
+                    need_redraw = true;
+                }
+            }
+        return;
+    }
     if (dragging && focus < (int)rows.size()) {
         Row &r = rows[focus];
         size_t idx = index_at(r, focus, e.x);
@@ -1639,6 +1749,12 @@ static void on_button_release(XButtonEvent &e) {
             if (b == 0) add_row(rows.size());
             else remove_row(b);
         }
+        return;
+    }
+    if (rsel_dragging) {
+        rsel_dragging = false;
+        Row *rr = row_by_uid(rsel_uid);
+        if (rr && rsel_active(*rr)) own_selection(XA_PRIMARY, rsel_string());
         return;
     }
     if (focus < (int)rows.size() && has_sel(rows[focus])) own_selection(XA_PRIMARY, sel_text(rows[focus]));
