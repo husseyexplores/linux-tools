@@ -103,6 +103,8 @@ All shortcuts except cursor movement and Backspace/Delete can be changed in the 
 
 Anything qalculate understands works: `5 m to ft`, `100 USD to EUR`, `0xff to bin`, `sqrt(2)*pi`, `3 km/h * 2h`, `x := 7`. Assignments (`:=`) only run when you press Enter, so half-typed names never get defined.
 
+qalculate applies `to` to the whole expression only, so qcalc moves a conversion inside parentheses to the end: `(1 usd to jpy) * 10` is calculated as `(1 usd) * 10 to jpy`. It leaves the expression alone if it already ends in its own `to`, or if the parentheses convert to different targets.
+
 ## Your input is never lost
 All rows and cursor positions are saved to `~/.local/state/qcalc/state` after every edit. The write is atomic (temp file plus rename) and is synced to disk on hide and on exit. History is kept in `~/.local/state/qcalc/history`.
 

@@ -3,6 +3,7 @@
 #include <libqalculate/qalculate.h>
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <fcntl.h>
@@ -38,6 +39,89 @@ double steady_s() {
 void wake() {
     char c = 1;
     (void)!write(pipefd[1], &c, 1);
+}
+
+// libqalculate applies "to" only to a whole expression: "(1 usd to jpy) * 10" gives a wrong result.
+// Rewrite conversions inside parentheses into one at the end: "(1 usd) * 10 to jpy". Left as is when
+// the expression already ends with its own "to", or when the groups convert to different targets.
+bool word_char(unsigned char c) { return isalnum(c) || c == '_' || c >= 0x80; }
+
+// Length of a conversion operator ("to", "->", "→") at i, or 0.
+size_t to_op_at(const std::string &s, size_t i) {
+    if (s.compare(i, 2, "->") == 0) return 2;
+    if (s.compare(i, 3, "\xE2\x86\x92") == 0) return 3;  // →
+    if (i + 2 <= s.size() && (s[i] == 't' || s[i] == 'T') && (s[i + 1] == 'o' || s[i + 1] == 'O') &&
+        (i == 0 || !word_char(s[i - 1])) && (i + 2 == s.size() || !word_char(s[i + 2])))
+        return 2;
+    return 0;
+}
+
+// First conversion operator at depth 0 of s[from, to), or npos.
+size_t find_top_to(const std::string &s, size_t from, size_t to, size_t *len) {
+    int depth = 0;
+    for (size_t i = from; i < to; i++) {
+        char c = s[i];
+        if (c == '"' || c == '\'') {  // skip quoted text
+            size_t q = s.find(c, i + 1);
+            if (q == std::string::npos || q >= to) return std::string::npos;
+            i = q;
+            continue;
+        }
+        if (c == '(' || c == '[') depth++;
+        else if (c == ')' || c == ']') depth--;
+        else if (depth == 0) {
+            size_t l = to_op_at(s, i);
+            if (l) {
+                *len = l;
+                return i;
+            }
+        }
+    }
+    return std::string::npos;
+}
+
+std::string hoist_conversions(const std::string &expr) {
+    if (expr.find("to") == std::string::npos && expr.find("TO") == std::string::npos &&
+        expr.find("->") == std::string::npos && expr.find("\xE2\x86\x92") == std::string::npos)
+        return expr;
+    std::string s = expr, target;
+    bool changed = false;
+    for (int guard = 0; guard < 64; guard++) {
+        // find a "( ... to X )" group that is not a function call
+        bool found = false;
+        std::vector<size_t> open;
+        for (size_t i = 0; i < s.size() && !found; i++) {
+            if (s[i] == '"' || s[i] == '\'') {
+                size_t q = s.find(s[i], i + 1);
+                if (q == std::string::npos) break;
+                i = q;
+            } else if (s[i] == '(') open.push_back(i);
+            else if (s[i] == ')' && !open.empty()) {
+                size_t o = open.back();
+                open.pop_back();
+                size_t k = o;
+                while (k > 0 && s[k - 1] == ' ') k--;
+                if (k > 0 && word_char((unsigned char)s[k - 1])) continue;  // f(...)
+                size_t len = 0, p = find_top_to(s, o + 1, i, &len);
+                if (p == std::string::npos) continue;
+                std::string t = s.substr(p + len, i - p - len);
+                size_t a = t.find_first_not_of(' '), b = t.find_last_not_of(' ');
+                t = a == std::string::npos ? "" : t.substr(a, b - a + 1);
+                if (t.empty()) return expr;
+                if (!target.empty() && target != t) return expr;  // different targets: leave it
+                target = t;
+                size_t e = p;
+                while (e > o + 1 && s[e - 1] == ' ') e--;
+                s.erase(e, i - e);  // drop " to X", keep ")"
+                changed = found = true;
+            }
+        }
+        if (!found) break;
+    }
+    if (!changed) return expr;
+    size_t len;
+    if (find_top_to(s, 0, s.size(), &len) == std::string::npos) s += " to " + target;
+    return s;
 }
 
 void post_event(int kind) {  // mtx held
@@ -147,7 +231,7 @@ void worker() {
         bool approx = false, cmp = false, err = false;
         po.is_approximate = &approx;
         CALCULATOR->resetExchangeRatesUsed();
-        std::string r = CALCULATOR->calculateAndPrint(CALCULATOR->unlocalizeExpression(expr, eo.parse_options),
+        std::string r = CALCULATOR->calculateAndPrint(CALCULATOR->unlocalizeExpression(hoist_conversions(expr), eo.parse_options),
                                                       timeout, eo, po, fractions ? AUTOMATIC_FRACTION_AUTO : AUTOMATIC_FRACTION_OFF,
                                                       AUTOMATIC_APPROXIMATION_AUTO, nullptr, -1, &cmp);
         for (CalculatorMessage *m = CALCULATOR->message(); m; m = CALCULATOR->nextMessage())
