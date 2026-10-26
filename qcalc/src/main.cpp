@@ -1147,7 +1147,10 @@ static void run_action(int a, Row &r) {
     case ACT_HIDE: hide(); break;
     case ACT_COMMIT: commit(r); break;
     case ACT_NEW_ROW: add_row(focus + 1); break;
-    case ACT_REMOVE_ROW: remove_row(focus); break;
+    case ACT_REMOVE_ROW:  // on the last row it hides the window, like Esc
+        if (rows.size() > 1) remove_row(focus);
+        else hide();
+        break;
     case ACT_NEXT_ROW: focus = (int)((focus + 1) % n); break;
     case ACT_PREV_ROW: focus = (int)((focus + n - 1) % n); break;
     case ACT_HIST_PREV: history_nav(r, -1); break;

@@ -86,7 +86,7 @@ KDE: System Settings > Shortcuts > Add New > Command. GNOME: Settings > Keyboard
 | Enter | save the line to history and copy the result to the clipboard |
 | Up / Down | history, filtered by what's already typed (like fish shell) |
 | Ctrl+N, Ctrl+Enter, **+** | new row |
-| Ctrl+W, **×** | remove row |
+| Ctrl+W, **×** | remove row (on the only row, Ctrl+W hides the window like Esc) |
 | Tab / Shift+Tab, Ctrl+Up/Down | move between rows |
 | Ctrl+C | copy the selection, or the result if nothing is selected |
 | Ctrl+A / X / V / Z / Shift+Z | select all, cut, paste, undo, redo |
